@@ -1,0 +1,120 @@
+import urllib
+import urllib2
+import json
+import pprint
+
+# we need to persistant the cache, and check the cache for expiracy before reuse!
+cache = {}
+
+def query_track(name):
+   params = {"q" : name}
+   url = "http://ws.spotify.com/search/1/track.json?" + urllib.urlencode(params)
+   req = urllib2.Request(url)
+   msg = urllib2.urlopen(req).read()
+   jsonMsg = json.loads(msg)
+   for track in jsonMsg["tracks"]:
+       if track["name"].lower() == name.lower():
+           return track
+
+def get_track(name):
+   if name in cache:
+       return cache[name]
+   else:
+       track = query_track(name)
+       cache[name] = track
+       return track
+
+##### THIS IS THE CORE OF THE PROGRAM, AND THE HARDEST PART ####
+def all_cutpoints(num):
+   for cutnum in range(num):
+       print "how many cut: %s" % cutnum
+       cutpoints = [0]
+       # no cutpoint
+       if cutnum == 0:
+           yield cutpoints
+       else:
+           # initial cutpoints
+           for _ in range(cutnum):
+               cutpoints.append(0)
+           cp_idx = 1
+           while cp_idx > 0:
+               # if it's the last cutpoint
+               if cp_idx == len(cutpoints)-1:
+                   # if the last cutpoint is not overflow
+                   if cutpoints[cp_idx] <= num-2:
+                       cutpoints[cp_idx] += 1
+                       yield cutpoints
+                   else:
+                       cp_idx -= 1
+               # if the cutpoint is not overflow
+               elif cutpoints[cp_idx] <= num-cutnum+cp_idx-2:
+                   cutpoints[cp_idx] += 1
+                   # reset the next layer
+                   cutpoints[cp_idx+1] = cutpoints[cp_idx]
+                   cp_idx += 1
+               else:
+                   cp_idx -= 1
+
+def combo(words):
+   for cutpoints in all_cutpoints(len(words)):
+       phrases = []
+       for i in range(len(cutpoints)):
+           if i < len(cutpoints) - 1:
+               phrases.append(" ".join(words[cutpoints[i]:cutpoints[i+1]]))
+           else:
+               phrases.append(" ".join(words[cutpoints[i]:]))
+       print cutpoints, phrases
+       yield phrases
+
+def get_list(sentense):
+   words = sentense.split()
+   for phrases in combo(words):
+       playlist = []
+       nextcomb = False
+       for name in phrases:
+           track = get_track(name)
+           if track == None:
+               nextcomb = True
+               break
+           playlist.append(track)
+       if not nextcomb:
+           return playlist
+   return None
+
+#################################
+# everything above is the program
+# below is the entrance of the program and some print statements
+#################################
+
+def main(sentense):
+   playlist = get_list(sentense)
+   print "########################################"
+   if playlist is not None:
+       print "Result: the playlist is as following:"
+       pprint.pprint([(t["name"],t["artists"][0]["name"]) for t in playlist])
+   else:
+       print "Result: can't not make such a playlist"
+
+if __name__ == "__main__":
+#    for cutpoints in all_cutpoints(6):
+#        print cutpoints
+
+#    print "\ntest1\n"
+#    sentense = "If I can't let it out of my mind"
+#    main(sentense)
+#
+#    print "\ntest2\n"
+#    sentense = "my wife is getting angry"
+#    main(sentense)
+
+   print "\n test3\n"
+   sentense = "I will love you to the end of the world cause you are my baby forever"
+   main(sentense)
+
+### THE LAST ONE WILL PRODUCE RESULT AS ###
+#Result: the playlist is as following:
+#[(u'I Will Love You', u'Fisher'),
+# (u'To The End Of The World', u'Dragonland'),
+# (u'Cause', u'Rodriguez'),
+# (u'You Are My Baby', u'\uc560\uc988 \uc6d0(As One)'),
+# (u'Forever', u'Chris Brown')]
